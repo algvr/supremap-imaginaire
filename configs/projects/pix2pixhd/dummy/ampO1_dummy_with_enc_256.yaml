@@ -1,11 +1,11 @@
 # How often do you want to save output images during training.
-image_save_iter: 100
+image_save_iter: 500
 # How often do you want to save trained models.
 snapshot_save_epoch: 20
 # How often do you want to log the training stats.
 logging_iter: 100
 # Number of training epochs.
-max_epoch: 200
+max_epoch: 5000
 
 # trainer options
 trainer:
@@ -45,6 +45,10 @@ gen:
     weight_norm_type: spectral
     activation_norm_type: instance
     padding_mode: reflect
+    enc:
+        # all other parameters have defaults; see generators/pix2pixHD.py
+        num_feat_channels: 3  # according to Sec. 4 of paper; further confirmed by "getattr(enc_cfg, 'num_feat_channels', 3)" in generators/pix2pixHD.py
+
 
 dis:
     type: imaginaire.discriminators.multires_patch
@@ -79,12 +83,16 @@ dis_opt:
 
 # Data options.
 data:    
-    name: 'cityscapes'    
+    name: 'dummy'    
     type: imaginaire.datasets.paired_images    
     num_workers: 4
     input_types:
         - images:
-            ext: jpg
+            ext: png
+            num_channels: 3
+            normalize: True
+        - blurred:
+            ext: png
             num_channels: 3
             normalize: True
         - seg_maps:
@@ -101,7 +109,7 @@ data:
     full_data_ops: imaginaire.model_utils.label::make_one_hot, imaginaire.model_utils.label::concat_labels
     use_dont_care: False
     one_hot_num_classes:
-        seg_maps: 35
+        seg_maps: 7
     input_labels:
         - seg_maps
         - instance_maps
@@ -112,21 +120,21 @@ data:
     # Train dataset details.
     train:        
         roots:
-            - dataset/cityscapes/train            
-        batch_size: 2
+            - dataset/dummy/train            
+        batch_size: 3
         augmentations:
-            resize_smallest_side: 512
+            resize_smallest_side: 256
             random_scale_limit: 0.2
             horizontal_flip: True
-            random_crop_h_w: 512, 1024            
+            random_crop_h_w: 256, 256            
 
     # Validation dataset details.
     val:        
         roots:
-            - dataset/cityscapes/val            
-        batch_size: 1        
+            - dataset/dummy/val            
+        batch_size: 3
         augmentations:
-            resize_h_w: 512, 1024
+            resize_h_w: 256, 256
             horizontal_flip: False
 
 pretrained_weight: 1B3bXpQQzidJW0G3oCjYSWYEn2zd8h9dg
@@ -134,7 +142,7 @@ inference_args:
     random_style: False
 
 test_data:    
-    name: 'cityscapes'    
+    name: 'dummy'    
     type: imaginaire.datasets.paired_images    
     num_workers: 4
     input_types:
@@ -161,8 +169,8 @@ test_data:
     test:
         is_lmdb: False
         roots:
-            - projects/pix2pixhd/test_data/cityscapes_test        
+            - projects/pix2pixhd/test_data/dummy_test        
         batch_size: 1        
         augmentations:
-            resize_h_w: 512, 1024
+            resize_h_w: 256, 256
             horizontal_flip: False

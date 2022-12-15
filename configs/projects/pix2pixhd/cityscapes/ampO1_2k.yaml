@@ -85,7 +85,7 @@ data:
     num_workers: 4
     input_types:
         - images:
-            ext: png
+            ext: jpg
             num_channels: 3
             normalize: True
         - seg_maps:
@@ -113,7 +113,7 @@ data:
     # Train dataset details.
     train:        
         roots:
-            - datasets/cityscapes/train            
+            - dataset/cityscapes/train            
         batch_size: 2
         augmentations:
             resize_smallest_side: 1024
@@ -124,7 +124,7 @@ data:
     # Validation dataset details.
     val:        
         roots:
-            - datasets/cityscapes/val            
+            - dataset/cityscapes/val            
         batch_size: 1        
         augmentations:
             resize_h_w: 1024, 2048

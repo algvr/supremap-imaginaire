@@ -425,17 +425,21 @@ class BaseTrainer(object):
             if current_iteration >= self.cfg.snapshot_save_start_iter:
                 self.save_checkpoint(current_epoch, current_iteration)
 
+        val_data = self._start_of_iteration(next(iter(self.val_data_loader)), current_iteration)
+        val_data = to_cuda(val_data)
+        if self.cfg.trainer.channels_last:
+            val_data = to_channels_last(val_data)
+
         # Compute metrics.
         if current_iteration % self.cfg.metrics_iter == 0:
-            self.save_image(self._get_save_path('images', 'jpg'), data)
+            self.save_image(self._get_save_path('images', 'jpg'), val_data)
             self.write_metrics()
-
         # Compute image to be saved.
         elif current_iteration % self.cfg.image_save_iter == 0:
-            self.save_image(self._get_save_path('images', 'jpg'), data)
+            self.save_image(self._get_save_path('images', 'jpg'), val_data)
         elif current_iteration % self.cfg.image_display_iter == 0:
             image_path = os.path.join(self.cfg.logdir, 'images', 'current.jpg')
-            self.save_image(image_path, data)
+            self.save_image(image_path, val_data)
 
         # Logging.
         self._write_tensorboard()
