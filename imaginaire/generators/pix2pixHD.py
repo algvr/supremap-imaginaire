@@ -62,6 +62,7 @@ class Generator(nn.Module):
             self.contain_instance_map = True
         # The feature encoder is only useful when the instance map is provided.
         if hasattr(gen_cfg, 'enc') and self.contain_instance_map:
+            print('*** using feature encoder ***')
             num_feat_channels = getattr(gen_cfg.enc, 'num_feat_channels', 0)
             if num_feat_channels > 0:
                 num_input_channels += num_feat_channels
@@ -333,12 +334,20 @@ class Encoder(nn.Module):
         # Instance-wise average pooling.
         outputs_mean = torch.zeros_like(outputs)
         # Find all the unique labels in this batch.
-        inst_list = np.unique(instance_map.cpu().numpy().astype(int))
+        
+        # Decode instance IDs from the 0-1-rescaled tensor.
+        # Do not alter the channel dimension!
+        repeat_dims = (1, self.num_feat_channels, 1, 1)
+        decoded_instance_map = torch.zeros((instance_map.shape[0], 1, *instance_map.shape[2:]), dtype=int, device=instance_map.device)
+        for channel_idx in range(instance_map.shape[1]):
+            decoded_instance_map += torch.unsqueeze((instance_map[:, channel_idx] * 255.0).to(dtype=int) * (256 ** channel_idx), 1)
+
+        inst_list = np.unique(decoded_instance_map.cpu().numpy().astype(int))
         for i in inst_list:
             for b in range(input.size(0)):
-                # Find the pixels in this instance map have this instance label.
-                indices = (instance_map[b:b+1] == int(i)).nonzero()  # n x 4
-                # Scan through the feature channels.
+                # Find the pixels in this instance map that have this instance label.
+                indices = (decoded_instance_map[b:b+1] == int(i)).nonzero()  # n x 4
+                # Scan through the feature channels and output channel-wise mean of this instance's features.
                 for j in range(self.num_feat_channels):
                     output_ins = outputs[indices[:, 0] + b, indices[:, 1] + j,
                                          indices[:, 2], indices[:, 3]]
