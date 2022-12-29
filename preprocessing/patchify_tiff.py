@@ -10,7 +10,7 @@ import time
 
 
 def patchify(inputs, output_dir, patch_width_px, patch_height_px, output_format, create_tags, keep_fractional,
-             output_naming_scheme='patch_idx', output_naming_prefix=None):
+             keep_blanks, output_naming_scheme='patch_idx', output_naming_prefix=None):
     # "inputs" can be list of dirs, or GeoTiffs
     # should return list of GeoTiffs
     os.makedirs(output_dir, exist_ok=True)
@@ -233,21 +233,25 @@ def patchify(inputs, output_dir, patch_width_px, patch_height_px, output_format,
             print(f'*** Patch (y_idx: {patch_y_idx}, x_idx: {patch_x_idx} // ' +
                 f'y: {patch_y_start}->{patch_y_end}, x: {patch_x_start}->{patch_x_end}) ***')
             print(f'Full coord box: {full_coord_box}')
-            img = Image.fromarray(patch_arr.astype(np.uint8))
 
-            if create_tags:
-                img.tag_v2 = ImageFileDirectory_v2()
-                with Image.open(first_geotiff_path) as first_geotiff:
-                    for to_copy in {34735, 34736, 34737, 33550, 1024, 1025, 2016, *range(2048, 2062),
-                                    *range(3072, 3096), *range(4096, 5000)}:
-                        if to_copy in first_geotiff.tag_v2:
-                            img.tag_v2[to_copy] = first_geotiff.tag_v2[to_copy]
-                
-                # change ModelTiepointTag; assume ModelPixelScaleTag stays the same
-                img.tag_v2[33922] = (0.0, 0.0, 0.0, patch_x_start_coords, patch_y_start_coords, 0.0)  # i, j, k, x, y, z
-                img.save(output_path, tiffinfo=img.tag_v2)
+            if len(active_geotiffs) == 0 and not keep_blanks:
+                print('No GeoTIFF overlaps found; skipping blank tile.')
             else:
-                img.save(output_path)
+                img = Image.fromarray(patch_arr.astype(np.uint8))
+
+                if create_tags:
+                    img.tag_v2 = ImageFileDirectory_v2()
+                    with Image.open(first_geotiff_path) as first_geotiff:
+                        for to_copy in {34735, 34736, 34737, 33550, 1024, 1025, 2016, *range(2048, 2062),
+                                        *range(3072, 3096), *range(4096, 5000)}:
+                            if to_copy in first_geotiff.tag_v2:
+                                img.tag_v2[to_copy] = first_geotiff.tag_v2[to_copy]
+                    
+                    # change ModelTiepointTag; assume ModelPixelScaleTag stays the same
+                    img.tag_v2[33922] = (0.0, 0.0, 0.0, patch_x_start_coords, patch_y_start_coords, 0.0)  # i, j, k, x, y, z
+                    img.save(output_path, tiffinfo=img.tag_v2)
+                else:
+                    img.save(output_path)
 
 
 if __name__ == '__main__':
@@ -263,10 +267,12 @@ if __name__ == '__main__':
                                                         'completely', action='store_true')
     parser.add_argument('-n', '--output-naming-scheme', choices=['patch_idx', 'patch_pxs', 'patch_coords'])
     parser.add_argument('-p', '--output-naming-prefix', type=str, default='output')
+    parser.add_argument('-B', '--skip-blanks', action='store_true')
 
     args = parser.parse_args()
     if args.output_dir is None:
         args.output_dir = f'supremap_patchification_{int(time.time())}'
 
     patchify(args.input_dir, args.output_dir, args.patch_width, args.patch_height, args.output_format,
-             not args.skip_tagging, not args.skip_fractional, args.output_naming_scheme, args.output_naming_prefix)
+             not args.skip_tagging, not args.skip_fractional, not args.skip_blanks, args.output_naming_scheme,
+             args.output_naming_prefix)
