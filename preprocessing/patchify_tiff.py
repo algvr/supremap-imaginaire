@@ -9,7 +9,8 @@ from sortedcontainers import SortedDict
 import time
 
 
-def patchify(inputs, output_dir, patch_width_px, patch_height_px, output_format, create_tags, keep_fractional):
+def patchify(inputs, output_dir, patch_width_px, patch_height_px, output_format, create_tags, keep_fractional,
+             output_naming_scheme='patch_idx', output_naming_prefix=None):
     # "inputs" can be list of dirs, or GeoTiffs
     # should return list of GeoTiffs
     os.makedirs(output_dir, exist_ok=True)
@@ -213,9 +214,22 @@ def patchify(inputs, output_dir, patch_width_px, patch_height_px, output_format,
                               (patch_x_end_coords, patch_y_end_coords))
 
             os.makedirs(output_dir, exist_ok=True)
-            output_path =\
-                os.path.join(output_dir,
-                             f'output_y{"%05i" % patch_y_idx}_x{"%05i" % patch_x_idx}.{output_format}')
+            
+            output_naming_prefix = output_naming_prefix.strip()
+            if output_naming_prefix not in {None, ''} and not output_naming_prefix[-1] == '_':
+                output_naming_prefix += '_'
+            
+            if output_naming_scheme == 'patch_pxs':
+                fn = f'{output_naming_prefix}y{patch_y_idx * patch_height_px}px_x{patch_x_idx * patch_width_px}px.{output_format}'
+            elif output_naming_scheme == 'patch_idx':  # patch_idx
+                fn = f'{output_naming_prefix}y{"%05i" % patch_y_idx}_x{"%05i" % patch_x_idx}.{output_format}'
+            elif output_naming_scheme == 'patch_coords':
+                fn = f'{output_naming_prefix}y{patch_y_start_coords}_x{patch_x_start_coords}.{output_format}'
+            else:
+                raise NotImplementedError(f'Unknown naming scheme: "{output_naming_scheme}"')
+
+            output_path = os.path.join(output_dir, fn)
+            
             print(f'*** Patch (y_idx: {patch_y_idx}, x_idx: {patch_x_idx} // ' +
                 f'y: {patch_y_start}->{patch_y_end}, x: {patch_x_start}->{patch_x_end}) ***')
             print(f'Full coord box: {full_coord_box}')
@@ -235,6 +249,7 @@ def patchify(inputs, output_dir, patch_width_px, patch_height_px, output_format,
             else:
                 img.save(output_path)
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input-dir', help='Input director(y|ies)', type=str, action='append', default=None)
@@ -246,10 +261,12 @@ if __name__ == '__main__':
                         action='store_true')
     parser.add_argument('-F', '--skip-fractional', help='Discard patches that are not covered by the input images '\
                                                         'completely', action='store_true')
+    parser.add_argument('-n', '--output-naming-scheme', choices=['patch_idx', 'patch_pxs', 'patch_coords'])
+    parser.add_argument('-p', '--output-naming-prefix', type=str, default='output')
 
     args = parser.parse_args()
     if args.output_dir is None:
         args.output_dir = f'supremap_patchification_{int(time.time())}'
 
     patchify(args.input_dir, args.output_dir, args.patch_width, args.patch_height, args.output_format,
-             not args.skip_tagging, not args.skip_fractional)
+             not args.skip_tagging, not args.skip_fractional, args.output_naming_scheme, args.output_naming_prefix)
