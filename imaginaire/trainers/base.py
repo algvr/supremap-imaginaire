@@ -6,11 +6,12 @@ import json
 import os
 import time
 
+import shutil
 import torch
 import torchvision
-import wandb
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
+import wandb
 
 from imaginaire.utils.distributed import is_master, master_only
 from imaginaire.utils.distributed import master_only_print as print
@@ -150,6 +151,8 @@ class BaseTrainer(object):
         else:
             self.credentials = None
 
+        self.last_snapshot_save_iter = 0
+
         if 'TORCH_HOME' not in os.environ:
             os.environ['TORCH_HOME'] = os.path.join(
                 os.environ['HOME'], ".cache")
@@ -273,7 +276,7 @@ class BaseTrainer(object):
             # everything from scratch.
             current_epoch = 0
             current_iteration = 0
-            print('No checkpoint found.')
+            print('WARNING: No checkpoint found.')
             resume = False
             return resume, current_epoch, current_iteration
         # Load checkpoint
@@ -281,10 +284,24 @@ class BaseTrainer(object):
             checkpoint_path, map_location=lambda storage, loc: storage)
         current_epoch = 0
         current_iteration = 0
+        g_keys = checkpoint['net_G'].keys()
+        if next(filter(lambda k: k.startswith('module.averaged_model.enc'), g_keys), None) is not None:
+            print('Found averaged encoder in checkpoint.')
+        else:
+            print('Did not find averaged encoder in checkpoint.')
+        
+        if next(filter(lambda k: k.startswith('module.module.enc'), g_keys), None) is not None:
+            print('Found non-averaged encoder in checkpoint.')
+        else:
+            print('Did not find non-averaged encoder in checkpoint.')
+        
         if resume:
+            print('Will load optimizer weights.')
             self.net_G.load_state_dict(checkpoint['net_G'], strict=self.cfg.trainer.strict_resume)
+            print('Loaded generator weights.')
             if not self.is_inference:
                 self.net_D.load_state_dict(checkpoint['net_D'], strict=self.cfg.trainer.strict_resume)
+                print('Loaded discriminator weights.')
                 if 'opt_G' in checkpoint:
                     current_epoch = checkpoint['current_epoch']
                     current_iteration = checkpoint['current_iteration']
@@ -293,6 +310,7 @@ class BaseTrainer(object):
                     if load_sch:
                         self.sch_G.load_state_dict(checkpoint['sch_G'])
                         self.sch_D.load_state_dict(checkpoint['sch_D'])
+                        print('Loaded scheduler parameters.')
                     else:
                         if self.cfg.gen_opt.lr_policy.iteration_mode:
                             self.sch_G.last_epoch = current_iteration
@@ -302,10 +320,12 @@ class BaseTrainer(object):
                             self.sch_D.last_epoch = current_iteration
                         else:
                             self.sch_D.last_epoch = current_epoch
-                    print('Load from: {}'.format(checkpoint_path))
+                        print('Skipped loading scheduler parameters.')
+                    print('Loaded checkpoint from: {}'.format(checkpoint_path))
                 else:
-                    print('Load network weights only.')
+                    print('Loaded network weights only (skipped optimizer).')
         else:
+            print('Will not load optimizer weights.')
             try:
                 self.net_G.load_state_dict(checkpoint['net_G'], strict=self.cfg.trainer.strict_resume)
                 if 'net_D' in checkpoint:
@@ -422,6 +442,7 @@ class BaseTrainer(object):
 
         # Save everything to the checkpoint.
         if current_iteration % self.cfg.snapshot_save_iter == 0:
+            self.last_snapshot_save_iter = current_iteration
             if current_iteration >= self.cfg.snapshot_save_start_iter:
                 self.save_checkpoint(current_epoch, current_iteration)
 
@@ -481,6 +502,7 @@ class BaseTrainer(object):
         # Save everything to the checkpoint.
         if current_iteration % self.cfg.snapshot_save_iter == 0:
             if current_epoch >= self.cfg.snapshot_save_start_epoch:
+                print(">>>>> Saving checkpoint")
                 self.save_checkpoint(current_epoch, current_iteration)
 
         # Compute metrics.
@@ -841,16 +863,44 @@ class BaseTrainer(object):
         net_G.eval()
 
         print('# of samples %d' % len(data_loader))
+        inference_dir = os.path.join(output_dir, 'inference')
+        original_dir = os.path.join(output_dir, 'original')
+        blurred_dir = os.path.join(output_dir, 'blurred')
+        seg_map_dir = os.path.join(output_dir, 'seg_maps')
+        os.makedirs(inference_dir, exist_ok=True)
+        os.makedirs(original_dir, exist_ok=True)
+        os.makedirs(blurred_dir, exist_ok=True)
+        os.makedirs(seg_map_dir, exist_ok=True)
         for it, data in enumerate(tqdm(data_loader)):
             data = self.start_of_iteration(data, current_iteration=-1)
             with torch.no_grad():
                 output_images, file_names = \
                     net_G.inference(data, **vars(inference_args))
-            for output_image, file_name in zip(output_images, file_names):
-                fullname = os.path.join(output_dir, file_name + '.jpg')
-                output_image = tensor2pilimage(output_image.clamp_(-1, 1),
-                                               minus1to1_normalized=True)
-                save_pilimage_in_jpeg(fullname, output_image)
+            for idx, pair in enumerate(zip(output_images, file_names)):
+                output_image, file_name = pair
+                inference_path = os.path.join(inference_dir, file_name + '.jpg')
+                # turn to list to enable traversing multiple times:
+                data_types_exts = list(zip(self.cfg.test_data['data_types'], self.cfg.test_data['extensions']))
+                seg_map_ext = next(filter(lambda f: f[0] == 'seg_maps', data_types_exts))[1]
+                original_ext = next(filter(lambda f: f[0] == 'images', data_types_exts))[1]
+                blurred_ext = next(filter(lambda f: f[0] == 'blurred', data_types_exts))[1]
+
+                original_dest_path = os.path.join(original_dir, f'{file_name}.{original_ext}')
+                blurred_dest_path = os.path.join(blurred_dir, f'{file_name}.{blurred_ext}')
+                seg_map_dest_path = os.path.join(seg_map_dir, f'{file_name}.{seg_map_ext}')
+                inference_image = tensor2pilimage(output_image.clamp_(-1, 1),
+                                                  minus1to1_normalized=True)
+                save_pilimage_in_jpeg(inference_path, inference_image)
+                # copy seg map image
+                original_src_path = (f'{self.cfg.test_data["test"]["roots"][0]}/images/'
+                                     + f'{data["key"]["images"][0][0]}.{original_ext}')
+                blurred_src_path = (f'{self.cfg.test_data["test"]["roots"][0]}/blurred/'
+                                    + f'{data["key"]["images"][0][0]}.{blurred_ext}')
+                seg_map_src_path = (f'{self.cfg.test_data["test"]["roots"][0]}/seg_maps/'
+                                    + f'{data["key"]["seg_maps"][0][0]}.{seg_map_ext}')
+                shutil.copy(original_src_path, original_dest_path)
+                shutil.copy(blurred_src_path, blurred_dest_path)
+                shutil.copy(seg_map_src_path, seg_map_dest_path)
 
     def _get_total_loss(self, gen_forward):
         r"""Return the total loss to be backpropagated.

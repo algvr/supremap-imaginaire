@@ -39,7 +39,8 @@ def parse_args():
     parser.add_argument('--use_jit', action='store_true')
     parser.add_argument('--profile', action='store_true')
     parser.add_argument('--wandb', action='store_true')
-    parser.add_argument('--wandb_name', default='default', type=str)
+    parser.add_argument('--wandb_name', default='supremap', type=str)
+    parser.add_argument('--wandb_entity', default='gsaltintas', type=str)
     parser.add_argument('--wandb_id', type=str)
     parser.add_argument('--resume', type=int)
     parser.add_argument('--num_workers', type=int)
@@ -97,27 +98,34 @@ def main():
 
     # Initialize Wandb.
     if is_master():
+        # "id" is used to uniquely identify this run
         if args.wandb_id is not None:
             wandb_id = args.wandb_id
+            print(f"Using supplied wandb_id {wandb_id}.")
         else:
             if resumed and os.path.exists(os.path.join(cfg.logdir, 'wandb_id.txt')):
                 with open(os.path.join(cfg.logdir, 'wandb_id.txt'), 'r+') as f:
                     wandb_id = f.read()
             else:
                 wandb_id = wandb.util.generate_id()
+                print(f"Using newly generated wandb_id {wandb_id}.")
                 with open(os.path.join(cfg.logdir, 'wandb_id.txt'), 'w+') as f:
                     f.write(wandb_id)
         wandb_mode = "disabled" if (args.debug or not args.wandb) else "online"
         wandb.init(id=wandb_id,
                    project=args.wandb_name,
+                   entity=args.wandb_entity,
                    config=cfg,
                    name=os.path.basename(cfg.logdir),
-                   resume="allow",
+                   resume='allow',
                    settings=wandb.Settings(start_method="fork"),
                    mode=wandb_mode)
+        print(f"made wandb.init call with wandb_id {wandb_id}; mode: {wandb_mode}")
         wandb.config.update({'dataset': cfg.data.name})
         wandb.watch(trainer.net_G_module)
         wandb.watch(trainer.net_D.module)
+    else:
+        print("Not a master, so skipping wandb initalization.")
 
     # Start training.
     for epoch in range(current_epoch, cfg.max_epoch):

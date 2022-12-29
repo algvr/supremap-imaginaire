@@ -68,6 +68,7 @@ class Generator(nn.Module):
                 num_input_channels += num_feat_channels
                 self.concat_features = True
                 self.encoder = Encoder(gen_cfg.enc, data_cfg)
+                self.blur_encoder_input = getattr(gen_cfg.enc, 'blur_input', False)
 
         # Global generator model.
         global_model = GlobalGenerator(global_gen_cfg, data_cfg,
@@ -111,7 +112,7 @@ class Generator(nn.Module):
 
         output = dict()
         if self.concat_features:
-            features = self.encoder(data['images'], data['instance_maps'])
+            features = self.encoder(data['blurred' if self.blur_encoder_input else 'images'], data['instance_maps'])
             label = torch.cat([label, features], dim=1)
             output['feature_maps'] = features
 
