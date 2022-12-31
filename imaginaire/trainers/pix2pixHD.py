@@ -171,7 +171,7 @@ class Trainer(SPADETrainer):
                              net_E,
                              self.pre_process,
                              is_cityscapes)
-        # clear old checkpoints
+        # delete old checkpoints
         for root, dirs, files in os.walk(self.cfg.logdir):
             for filename in files:
                 if not filename.lower().endswith('.pt'):

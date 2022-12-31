@@ -235,7 +235,7 @@ def patchify(inputs, output_dir, patch_width_px, patch_height_px, output_format,
             print(f'Full coord box: {full_coord_box}')
 
             if len(active_geotiffs) == 0 and not keep_blanks:
-                print('No GeoTIFF overlaps found; skipping blank tile.')
+                print('No GeoTIFF overlaps found; skipping blank patch.')
             else:
                 img = Image.fromarray(patch_arr.astype(np.uint8))
 
@@ -264,10 +264,15 @@ if __name__ == '__main__':
     parser.add_argument('-T', '--skip-tagging', help='Whether to skip tagging of created TIFF patches.',
                         action='store_true')
     parser.add_argument('-F', '--skip-fractional', help='Discard patches that are not covered by the input images '\
-                                                        'completely', action='store_true')
-    parser.add_argument('-n', '--output-naming-scheme', choices=['patch_idx', 'patch_pxs', 'patch_coords'])
-    parser.add_argument('-p', '--output-naming-prefix', type=str, default='output')
-    parser.add_argument('-B', '--skip-blanks', action='store_true')
+                        'completely', action='store_true')
+    parser.add_argument('-n', '--output-naming-scheme', help='Naming scheme to use for output files ("patch_idx": '\
+                        'horizontal/vertical index of patch; "patch_pxs": position of top-left corner, in pixels; '\
+                        '"patch_coords": coordinates of top-left corner, in the CRS used in the input TIFFs).',
+                        choices=['patch_idx', 'patch_pxs', 'patch_coords'])
+    parser.add_argument('-p', '--output-naming-prefix', help='Prefix to use for output files.', type=str,
+                        default='output')
+    parser.add_argument('-B', '--skip-blanks', help='Whether to skip patches for which no overlap with an input image '\
+                        'exists.', action='store_true')
 
     args = parser.parse_args()
     if args.output_dir is None:
