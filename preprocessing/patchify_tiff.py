@@ -5,12 +5,12 @@ import numpy as np
 import os
 from PIL import Image
 from PIL.TiffImagePlugin import ImageFileDirectory_v2
-from sortedcontainers import SortedDict
+from sortedcontainers import SortedDict, SortedList
 import time
 
 
 def patchify(inputs, output_dir, patch_width_px, patch_height_px, output_format, create_tags, keep_fractional,
-             keep_blanks, output_naming_scheme='patch_idx', output_naming_prefix=None):
+             keep_blanks, bboxes=None, output_naming_scheme='patch_idx', output_naming_prefix=None):
     # "inputs" can be list of dirs, or GeoTiffs
     # should return list of GeoTiffs
     os.makedirs(output_dir, exist_ok=True)
@@ -90,7 +90,7 @@ def patchify(inputs, output_dir, patch_width_px, patch_height_px, output_format,
                 prelim_process_gt(input, GeoTiff(input))
     
     if first_geotiff_path is None and create_tags:
-        raise NotImplementedError('Must supply at least one path to a GeoTiff')
+        raise NotImplementedError('Must supply at least one path to a GeoTiff.')
 
     x_dict_pxs = []
     y_dict_pxs = []
@@ -125,22 +125,57 @@ def patchify(inputs, output_dir, patch_width_px, patch_height_px, output_format,
     
     active_geotiffs = set()
 
-    for patch_y_idx in itertools.count():
-        patch_y_start = patch_y_idx * patch_height_px
-        patch_y_end = (patch_y_idx + 1) * patch_height_px
+    patch_y_xs = SortedDict()
 
-        if patch_y_start >= y_keys[-1] or (not keep_fractional and patch_y_end >= y_keys[-1]):
-            break
+    if min(patch_width_px, patch_height_px) > 0:
+        for patch_y_idx in itertools.count():
+            patch_y_start = patch_y_idx * patch_height_px
+            patch_y_end = (patch_y_idx + 1) * patch_height_px
+
+            if patch_y_start >= y_keys[-1] or (not keep_fractional and patch_y_end >= y_keys[-1]):
+                break
+            
+            patch_y_xs[(patch_y_start, patch_y_end)] = SortedList()
+
+            x_keys_pos = 0
+            for patch_x_idx in itertools.count():
+                patch_x_start = patch_x_idx * patch_width_px
+                patch_x_end = (patch_x_idx + 1) * patch_width_px
+                
+                if patch_x_start >= x_keys[-1] or (not keep_fractional and patch_x_end >= x_keys[-1]):
+                    break
+                
+                patch_y_xs[(patch_y_start, patch_y_end)].add((patch_x_start, patch_x_end))
+
+    if bboxes not in [None, []]:
+        for bbox in bboxes:
+            if isinstance(bbox, str):
+                bbox = eval(bbox)
+            if len(bbox) == 2:
+                bbox = (bbox[0][0], bbox[0][1], bbox[1][0], bbox[1][1])
+            # bbox provided in format: (LON_WEST, LAT_SOUTH, LON_EAST, LAT_NORTH)
+            # get_int_box expects: (LON_WEST, LAT_NORTH, LON_EAST, LAT_SOUTH)
+            gt_bbox = ((bbox[0], bbox[3]), (bbox[2], bbox[1]))
+            int_box_x = leftmost_geotiff.get_int_box(gt_bbox)
+            int_box_y = topmost_geotiff.get_int_box(gt_bbox)
+            
+            patch_x_start = int_box_x[0][0]
+            patch_x_end = int_box_x[1][0]
+            patch_y_start = int_box_y[0][1]
+            patch_y_end = int_box_y[1][1]
+
+            y_bbox = (patch_y_start, patch_y_end, (bbox[3], bbox[1]))
+            patch_y_xs[y_bbox] = SortedList()
+            patch_y_xs[y_bbox].add((patch_x_start, patch_x_end, (bbox[0], bbox[2])))
+
+    for patch_y_idx, patch_y_coords in enumerate(patch_y_xs.keys()):
+        patch_y_start, patch_y_end, *orig_y_coords = patch_y_coords
         
         geotiffs_to_disable = []
 
         x_keys_pos = 0
-        for patch_x_idx in itertools.count():
-            patch_x_start = patch_x_idx * patch_width_px
-            patch_x_end = (patch_x_idx + 1) * patch_width_px
-            
-            if patch_x_start >= x_keys[-1] or (not keep_fractional and patch_x_end >= x_keys[-1]):
-                break
+        for patch_x_idx, patch_x_coords in enumerate(patch_y_xs[patch_y_coords]):
+            patch_x_start, patch_x_end, *orig_x_coords = patch_x_coords
 
             for geotiff_to_disable in geotiffs_to_disable:
                 active_geotiffs.remove(geotiff_to_disable)
@@ -149,11 +184,19 @@ def patchify(inputs, output_dir, patch_width_px, patch_height_px, output_format,
 
             # keep a list of currently active TIFFs that need to be disabled after the current patch
             
-            patch_x_start_coords = leftmost_geotiff.get_coords(patch_x_start, patch_y_start)[0]
-            patch_x_end_coords = leftmost_geotiff.get_coords(patch_x_end, patch_y_end)[0]
+            if len(orig_x_coords) == 2:
+                patch_x_start_coords = orig_x_coords[0]
+                patch_x_end_coords = orig_x_coords[1]
+            else:
+                patch_x_start_coords = leftmost_geotiff.get_coords(patch_x_start, patch_y_start)[0]
+                patch_x_end_coords = leftmost_geotiff.get_coords(patch_x_end, patch_y_end)[0]
 
-            patch_y_start_coords = topmost_geotiff.get_coords(patch_x_start, patch_y_start)[1]
-            patch_y_end_coords = topmost_geotiff.get_coords(patch_x_end, patch_y_end)[1]
+            if len(orig_y_coords) == 2:
+                patch_y_start_coords = orig_y_coords[0]
+                patch_y_end_coords = orig_y_coords[1]
+            else:
+                patch_y_start_coords = topmost_geotiff.get_coords(patch_x_start, patch_y_start)[1]
+                patch_y_end_coords = topmost_geotiff.get_coords(patch_x_end, patch_y_end)[1]
 
             while x_keys_pos < num_x_keys and x_keys[x_keys_pos] < patch_x_end:
                 event = x_dict_pxs[x_keys_pos][1]
@@ -174,7 +217,8 @@ def patchify(inputs, output_dir, patch_width_px, patch_height_px, output_format,
                     geotiffs_to_disable.append(event_gt)
                 x_keys_pos += 1
 
-            patch_arr = np.zeros((patch_height_px, patch_width_px, num_channels))
+            # + 1 not needed: end coords are exclusive
+            patch_arr = np.zeros((patch_y_end - patch_y_start, patch_x_end - patch_x_start, num_channels))
 
             # paint this patch: create numpy array from zarrs of patches
             for gt in active_geotiffs:
@@ -196,10 +240,10 @@ def patchify(inputs, output_dir, patch_width_px, patch_height_px, output_format,
                  (px_box_inter[0][1] - y_px_box[0][1], px_box_inter[1][1] - y_px_box[0][1]))
                 
                 px_box_inter_backproj_local =\
-                [((px_box_inter[0][0] - patch_width_px * patch_x_idx),
-                  (px_box_inter[1][0] - patch_width_px * patch_x_idx)),
-                 ((px_box_inter[0][1] - patch_height_px * patch_y_idx),
-                  (px_box_inter[1][1] - patch_height_px * patch_y_idx))]
+                [((px_box_inter[0][0] - patch_x_start),
+                  (px_box_inter[1][0] - patch_x_start)),
+                 ((px_box_inter[0][1] - patch_y_start),
+                  (px_box_inter[1][1] - patch_y_start))]
 
                 # note: here, we use (y, x) instead of (x, y)
 
@@ -219,17 +263,26 @@ def patchify(inputs, output_dir, patch_width_px, patch_height_px, output_format,
             if output_naming_prefix not in {None, ''} and not output_naming_prefix[-1] == '_':
                 output_naming_prefix += '_'
             
-            if output_naming_scheme == 'patch_pxs':
-                fn = f'{output_naming_prefix}y{patch_y_idx * patch_height_px}px_x{patch_x_idx * patch_width_px}px.{output_format}'
-            elif output_naming_scheme == 'patch_idx':  # patch_idx
-                fn = f'{output_naming_prefix}y{"%05i" % patch_y_idx}_x{"%05i" % patch_x_idx}.{output_format}'
-            elif output_naming_scheme == 'patch_coords':
-                fn = f'{output_naming_prefix}y{patch_y_start_coords}_x{patch_x_start_coords}.{output_format}'
-            else:
-                raise NotImplementedError(f'Unknown naming scheme: "{output_naming_scheme}"')
+            def get_fn(counter):
+                ctr = '' if counter <= 1 else f'_{counter}'
+                if output_naming_scheme == 'patch_pxs':
+                    fn = f'{output_naming_prefix}y{patch_y_start}px_x{patch_x_start}px{ctr}.{output_format}'
+                elif output_naming_scheme == 'patch_idx':  # patch_idx
+                    fn = f'{output_naming_prefix}y{"%05i" % patch_y_idx}_x{"%05i" % patch_x_idx}{ctr}.{output_format}'
+                elif output_naming_scheme == 'patch_coords':
+                    fn = f'{output_naming_prefix}y{patch_y_start_coords}_x{patch_x_start_coords}{ctr}.{output_format}'
+                else:
+                    raise NotImplementedError(f'Unknown naming scheme: "{output_naming_scheme}"')
+                return fn
 
-            output_path = os.path.join(output_dir, fn)
-            
+            counter = 0
+            while True:
+                counter += 1
+                fn = get_fn(counter)
+                output_path = os.path.join(output_dir, fn)
+                if not os.path.isfile(output_path):
+                    break
+
             print(f'*** Patch (y_idx: {patch_y_idx}, x_idx: {patch_x_idx} // ' +
                 f'y: {patch_y_start}->{patch_y_end}, x: {patch_x_start}->{patch_x_end}) ***')
             print(f'Full coord box: {full_coord_box}')
@@ -258,8 +311,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--input-dir', help='Input director(y|ies)', type=str, action='append', default=None)
     parser.add_argument('-o', '--output-dir', help='Output directory', type=str, default=None)
-    parser.add_argument('-W', '--patch-width', help='Width of output patches (in px)', type=int)
-    parser.add_argument('-H', '--patch-height', help='Height of output patches (in px)', type=int)
+    parser.add_argument('-W', '--patch-width', help='Width of output patches (in px)', type=int, default=0)
+    parser.add_argument('-H', '--patch-height', help='Height of output patches (in px)', type=int, default=0)
     parser.add_argument('-f', '--output-format', help='Format of the output', type=str, choices=['png', 'tiff'])
     parser.add_argument('-T', '--skip-tagging', help='Whether to skip tagging of created TIFF patches.',
                         action='store_true')
@@ -271,6 +324,9 @@ if __name__ == '__main__':
                         choices=['patch_idx', 'patch_pxs', 'patch_coords'])
     parser.add_argument('-p', '--output-naming-prefix', help='Prefix to use for output files.', type=str,
                         default='output')
+    parser.add_argument('-b', '--bbox', help='Bounding box(es) to cut instead of using a uniform patchification '\
+                                             '(format: (LON_WEST, LAT_SOUTH, LON_EAST, LAT_NORTH)).',
+                        type=str, action='append', default=None)
     parser.add_argument('-B', '--skip-blanks', help='Whether to skip patches for which no overlap with an input image '\
                         'exists.', action='store_true')
 
@@ -279,5 +335,5 @@ if __name__ == '__main__':
         args.output_dir = f'supremap_patchification_{int(time.time())}'
 
     patchify(args.input_dir, args.output_dir, args.patch_width, args.patch_height, args.output_format,
-             not args.skip_tagging, not args.skip_fractional, not args.skip_blanks, args.output_naming_scheme,
-             args.output_naming_prefix)
+             not args.skip_tagging, not args.skip_fractional, not args.skip_blanks, args.bbox,
+             args.output_naming_scheme, args.output_naming_prefix)
