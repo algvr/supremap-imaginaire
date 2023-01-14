@@ -266,6 +266,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     psnrs = []
+    ssims = []
 
     suffixes = {'.bmp', '.jpg', '.png', '.tif', '.tiff'}
     suffixes = {*suffixes, *map(str.upper, suffixes)}
@@ -284,7 +285,15 @@ if __name__ == '__main__':
 
         with Image.open(str(entry)) as inference_img:
             with Image.open(gt_path) as gt_img:
-                psnr = calculate_psnr(np.array(inference_img), np.array(gt_img), crop_border=0)
+                inference_img_arr = np.array(inference_img)
+                gt_img_arr = np.array(gt_img)
+                psnr = calculate_psnr(inference_img_arr, gt_img_arr, crop_border=0)
+                ssim = calculate_ssim(inference_img_arr, gt_img_arr, crop_border=0)
                 psnrs.append(psnr)
-    
+                ssims.append(ssim)
+
+    print('*** PSNRs: ***')
     print(pd.DataFrame(np.array(psnrs)).describe())
+
+    print('\n*** SSIMs: ***')
+    print(pd.DataFrame(np.array(ssims)).describe())
