@@ -1,6 +1,6 @@
 # SupReMap-Imaginaire
 
-This repository is based on https://github.com/NVlabs/imaginaire, and has been extended to synthesize high-resolution satellite images based on data generated with the SupReMap project, as described in https://github.com/gsaltintas/RemoteSensingData.
+This repository is based on https://github.com/NVlabs/imaginaire, and has been extended to synthesize high-resolution satellite images based on data generated with the SupReMap project, as described in https://github.com/gsaltintas/supremap-data.
 
 ## Setup
 
