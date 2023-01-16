@@ -1,13 +1,24 @@
 # taken from the basicsr package: https://pypi.org/project/basicsr/
+# part of code adapted from https://github.com/hukkelas/pytorch-frechet-inception-distance/blob/master/fid.py
+
 
 import argparse
 import cv2
 import numpy as np
 import os
+import torch
+from torch import nn
+import torch.nn.functional as F
+from torchvision.models import inception_v3
 import pandas as pd
 from pathlib import Path
+import pickle
 from PIL import Image
 from tqdm import tqdm
+
+
+def to_cuda(x):
+    return x.cuda() if torch.cuda.is_available() else x
 
 
 def _convert_input_type_range(img):
@@ -233,14 +244,57 @@ def _ssim(img, img2):
     return ssim_map.mean()
 
 
+class PartialInceptionNetwork(nn.Module):
+    def __init__(self, transform_input=True):
+        super().__init__()
+        self.inception_network = inception_v3(pretrained=True)
+        self.inception_network.Mixed_7c.register_forward_hook(self.output_hook)
+        self.transform_input = transform_input
+
+    def output_hook(self, module, input, output):
+        # N x 2048 x 8 x 8
+        self.mixed_7c_output = output
+
+    def forward(self, x):
+        """
+        Args:
+            x: shape (N, 3, 299, 299) dtype: torch.float32 in range 0-1
+        Returns:
+            inception activations: torch.tensor, shape: (N, 2048), dtype: torch.float32
+        """
+        if x.shape[1:] != (3, 299, 299):
+            x = F.interpolate(x, (299, 299), mode='bilinear')
+
+        assert x.shape[1:] == (3, 299, 299), "Expected input shape to be: (N,3,299,299)" + \
+                                             ", but got {}".format(x.shape)
+        x = x * 2 - 1  # Normalize to [-1, 1]
+
+        # Trigger output hook
+        self.inception_network(x)
+
+        # Output: N x 2048 x 1 x 1
+        activations = self.mixed_7c_output
+        activations = F.adaptive_avg_pool2d(activations, (1, 1))
+        activations = activations.view(x.shape[0], 2048)
+        return activations
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--inference-dir', help='Path to directory with generated images.', type=str)
     parser.add_argument('--gt-dir', help='Path to directory with corresponding GT images.', type=str)
+    
+    # load model
+
+    model = PartialInceptionNetwork()
+    if torch.cuda.is_available():
+        model = to_cuda(model)
+    model.eval()
 
     args = parser.parse_args()
     psnrs = []
     ssims = []
+    fids = []
 
     suffixes = {'.bmp', '.jpg', '.png', '.tif', '.tiff'}
     suffixes = {*suffixes, *map(str.upper, suffixes)}
@@ -265,9 +319,43 @@ if __name__ == '__main__':
                 ssim = calculate_ssim(inference_img_arr, gt_img_arr, crop_border=0)
                 psnrs.append(psnr)
                 ssims.append(ssim)
+                
+                # FID
+
+                with torch.no_grad():
+                    image_1 = torch.from_numpy(inference_img_arr)
+                    if len(image_1.shape) == 2:
+                        image_1 = image_1.unsqueeze(-1).repeat((1, 1, 3))
+                    image_1 = torch.permute(image_1, (2, 0, 1))  # channel dim first
+                    image_1 = image_1[
+                        [2, 1, 0, 3] if image_1.shape[0] == 4 else [2, 1, 0] if image_1.shape[0] == 3 else [0]]  # BGR->RGB
+                    image_1 = image_1[:3, ...].float() / 255.0
+                    if torch.cuda.is_available():
+                        image_1 = to_cuda(image_1)
+
+                    features_1 = model(image_1.unsqueeze(0))
+
+                    image_2 = torch.from_numpy(gt_img_arr)
+                    if len(image_2.shape) == 2:
+                        image_2 = image_2.unsqueeze(-1).repeat((1, 1, 3))
+                    image_2 = torch.permute(image_2, (2, 0, 1))  # channel dim first
+                    image_2 = image_2[
+                        [2, 1, 0, 3] if image_2.shape[0] == 4 else [2, 1, 0] if image_2.shape[0] == 3 else [0]]  # BGR->RGB
+                    image_2 = image_2[:3, ...].float() / 255.0
+                    if torch.cuda.is_available():
+                        image_2 = to_cuda(image_2)
+
+                    features_2 = model(image_2.unsqueeze(0))
+
+                    # use MSE as distance
+                    fid = ((features_1 - features_2) ** 2.0).sum() / torch.numel(features_1)
+                    fids.append(fid.cpu().numpy())
 
     print('*** PSNRs: ***')
     print(pd.DataFrame(np.array(psnrs)).describe())
 
     print('\n*** SSIMs: ***')
     print(pd.DataFrame(np.array(ssims)).describe())
+
+    print('\n*** FIDs: ***')
+    print(pd.DataFrame(np.array(fids)).describe())
