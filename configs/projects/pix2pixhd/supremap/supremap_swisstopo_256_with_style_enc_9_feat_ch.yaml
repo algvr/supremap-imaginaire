@@ -48,7 +48,7 @@ gen:
     padding_mode: reflect
     enc:
         # all other parameters have defaults; see generators/pix2pixHD.py
-        num_feat_channels: 9  # according to Sec. 4 of paper;
+        num_feat_channels: 9  # 3, according to Sec. 4 of paper;
                               # further confirmed by "getattr(enc_cfg, 'num_feat_channels', 3)"
                               # in generators/pix2pixHD.py
         blur_input: True  # use low-resolution (Sentinel) input for style encoder

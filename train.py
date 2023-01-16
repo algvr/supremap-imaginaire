@@ -39,8 +39,8 @@ def parse_args():
     parser.add_argument('--use_jit', action='store_true')
     parser.add_argument('--profile', action='store_true')
     parser.add_argument('--wandb', action='store_true')
-    parser.add_argument('--wandb_name', default='supremap', type=str)
-    parser.add_argument('--wandb_entity', default='gsaltintas', type=str)
+    parser.add_argument('--wandb_name', default=None, type=str)
+    parser.add_argument('--wandb_entity', default=None, type=str)
     parser.add_argument('--wandb_id', type=str)
     parser.add_argument('--resume', type=int)
     parser.add_argument('--num_workers', type=int)
@@ -120,7 +120,7 @@ def main():
                    resume='allow',
                    settings=wandb.Settings(start_method="fork"),
                    mode=wandb_mode)
-        print(f"made wandb.init call with wandb_id {wandb_id}; mode: {wandb_mode}")
+        print(f"Made wandb.init call with wandb_id {wandb_id}; mode: {wandb_mode}")
         wandb.config.update({'dataset': cfg.data.name})
         wandb.watch(trainer.net_G_module)
         wandb.watch(trainer.net_D.module)

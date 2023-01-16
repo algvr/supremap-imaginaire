@@ -12,8 +12,8 @@ Download our datasets into `/data/` before training:
 
 ```
 cd dataset
-wget https://algvrithm.com/files/supremap/supremap_lawin_swisstopo_dataset_real.zip
-unzip supremap_lawin_swisstopo_dataset_real.zip
+wget https://algvrithm.com/files/supremap/supremap_imaginaire_swisstopo_dataset.zip
+unzip supremap_imaginaire_swisstopo_dataset.zip
 ```
 
 ## Training
