@@ -6,7 +6,10 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from imaginaire.third_party.bias_act.bias_act import FusedNonlinearity
+try:
+    from imaginaire.third_party.bias_act.bias_act import FusedNonlinearity
+except:
+    pass
 
 
 class ScaledLeakyReLU(nn.Module):

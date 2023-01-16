@@ -171,14 +171,6 @@ class Trainer(SPADETrainer):
                              net_E,
                              self.pre_process,
                              is_cityscapes)
-        # delete old checkpoints
-        for root, dirs, files in os.walk(self.cfg.logdir):
-            for filename in files:
-                if not filename.lower().endswith('.pt'):
-                    continue
-                path = os.path.join(root, filename)
-                os.unlink(path)
-                print(f'Deleted old checkpoint "{path}".')
      
     def _compute_fid(self):
         r"""We will compute FID for the regular model using the eval mode.

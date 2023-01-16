@@ -18,6 +18,7 @@ def make_one_hot(cfg, is_inference, data):
     assert hasattr(cfg, 'one_hot_num_classes')
     num_classes = getattr(cfg, 'one_hot_num_classes')
     use_dont_care = getattr(cfg, 'use_dont_care', False)
+
     for data_type, data_type_num_classes in num_classes.items():
         if data_type in data.keys():
             data[data_type] = _encode_onehot(data[data_type] * 255.0, data_type_num_classes, use_dont_care).float()

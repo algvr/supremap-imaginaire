@@ -10,7 +10,11 @@ from torch import nn
 from torch.nn import functional as F
 
 from .misc import ApplyNoise
-from imaginaire.third_party.upfirdn2d.upfirdn2d import Blur
+
+try:
+    from imaginaire.third_party.upfirdn2d.upfirdn2d import Blur
+except:
+    pass
 
 
 class _BaseConvBlock(nn.Module):

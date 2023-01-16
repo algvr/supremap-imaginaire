@@ -222,7 +222,10 @@ class Trainer(BaseTrainer):
         we just report average FID.
         """
         if self.cfg.trainer.model_average_config.enabled:
-            regular_fid, average_fid = self._compute_fid()
+            # This feature has been disabled in this fork.
+            #regular_fid, average_fid = self._compute_fid()
+            regular_fid = 0.0
+            average_fid = 0.0
             metric_dict = {'FID/average': average_fid, 'FID/regular': regular_fid}
             self._write_to_meters(metric_dict, self.metric_meters, reduce=False)
         else:

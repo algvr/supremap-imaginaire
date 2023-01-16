@@ -600,11 +600,13 @@ def load_or_compute_activations(act_path, data_loader, key_real, key_fake,
                 data_loader, key_real, key_fake, generator,
                 sample_size, preprocess, **kwargs
             )
-        if act_path is not None and is_local_master():
-            print('Save activations to {}'.format(act_path))
-            if not os.path.exists(os.path.dirname(act_path)):
-                os.makedirs(os.path.dirname(act_path), exist_ok=True)
-            torch.save(act, act_path)
+
+        # This feature has been disabled in this fork.
+
+        # if act_path is not None and is_local_master():
+        #     if not os.path.exists(os.path.dirname(act_path)):
+        #         os.makedirs(os.path.dirname(act_path), exist_ok=True)
+        #     torch.save(act, act_path)
     return act
 
 

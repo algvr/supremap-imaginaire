@@ -1,3 +1,126 @@
+# SupReMap-Imaginaire
+
+This repository is based on https://github.com/NVlabs/imaginaire, and has been extended to synthesize high-resolution satellite images based on data generated with the SupReMap project, as described in https://github.com/gsaltintas/RemoteSensingData.
+
+## Setup
+
+Please follow the setup instructions provided below by the original Imaginaire authors.
+
+## Dataset
+
+Download our datasets into `/data/` before training:
+
+```
+cd dataset
+wget https://algvrithm.com/files/supremap/supremap_lawin_swisstopo_dataset_real.zip
+unzip supremap_lawin_swisstopo_dataset_real.zip
+```
+
+## Training
+
+This repository has been tested using a CUDA GPU with 24GB of VRAM available.
+
+### Train on Swisstopo data with style encoder (9 feature channels):
+
+`python -m torch.distributed.launch --nproc_per_node=1 --master_port=29501 train.py --config=configs/projects/pix2pixhd/supremap/supremap_swisstopo_256_with_style_enc_9_feat_ch.yaml`
+
+### Train on Swisstopo data without style encoder:
+
+`python -m torch.distributed.launch --nproc_per_node=1 --master_port=29501 train.py --config=configs/projects/pix2pixhd/supremap/supremap_swisstopo_256_without_style_enc.yaml`
+
+## Inference
+
+### Inference on Swisstopo data with style encoder (9 feature channels):
+
+`python inference.py --single_gpu --config=configs/projects/pix2pixhd/supremap/supremap_swisstopo_256_with_style_enc_9_feat_ch.yaml --output_dir=projects/pix2pixhd/output/supremap_imaginaire_swisstopo_with_style_encoder --checkpoint=<path_to_your_checkpoint>`
+
+Generated images will be saved into `projects/pix2pixhd/output/supremap_imaginaire_swisstopo_with_style_encoder`.
+
+### Inference on Swisstopo data without style encoder:
+
+`python inference.py --single_gpu --config=configs/projects/pix2pixhd/supremap/supremap_swisstopo_256_without_style_enc.yaml --output_dir=projects/pix2pixhd/output/supremap_imaginaire_swisstopo_without_style_encoder --checkpoint=<path_to_your_checkpoint>`
+
+Generated images will be saved into `projects/pix2pixhd/output/supremap_imaginaire_swisstopo_without_style_encoder`.
+
+
+
+## Pretrained Models
+
+This repository will automatically download and use a Cityscapes-1K-pretrained checkpoint when training is started, courtesy to the original Imaginaire authors.
+
+
+### Model trained on Swisstopo data with style encoder (9 feature channels) for 16.5K iterations:
+
+`https://algvrithm.com/files/supremap/pix2pixhd_with_style_encoder_iter_16500.pt`
+
+### Model trained on Swisstopo data without style encoder for 18.5K iterations:
+
+`https://algvrithm.com/files/supremap/pix2pixhd_without_style_encoder_iter_18500.pt`
+
+## Known Issues
+
+- "Discriminator overflowed"/"Generator overflowed" may get printed throughout training: https://github.com/NVlabs/imaginaire/issues/126
+- "Broken pipe" traceback messages may occasionally get printed throughout training.
+- On rare occasions, the model diverges during training. Monitor the visualizations and restart training from the last stable checkpoint if necessary. 
+- `cusolverDn.h` not found during setup: search for and install matching version from http://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/, then run `export CPLUS_INCLUDE_PATH=<your_cuda_path>/targets/x86_64-linux/include/:$CPLUS_INCLUDE_PATH`
+
+
+## Results
+
+We provide the following Peak Signal-Noise Ratio (PSNR) and Structural Similarity Index (SSIM) results achieved on the SupReMap Swisstopo dataset for reference, calculated using `scripts/calculate_metrics.py`. Visualizations are available at https://algvrithm.com/supremap-vis-v1/.
+
+### With style encoder (9 feature channels):
+
+``` 
+  *** PSNRs: ***         *** SSIMs: ***   
+
+count  557.000000      count  557.000000
+mean    13.628011      mean     0.188923
+std      1.226479      std      0.075893
+min      9.797507      min      0.069866      
+25%     12.887375      25%      0.143539     
+50%     13.567724      50%      0.168461
+75%     14.222213      75%      0.205571
+max     19.902980      max      0.621150
+```
+
+### Without style encoder:
+
+```  
+  *** PSNRs: ***         *** SSIMs: ***   
+                                                                                              
+count  557.000000      count  557.000000
+mean    13.257297      mean     0.185602                                                                                                   
+std      1.191875      std      0.077652
+min      9.903153      min      0.076972
+25%     12.489568      25%      0.139178
+50%     13.200566      50%      0.165121
+75%     13.981369      75%      0.200457
+max     17.848160      max      0.625442
+```
+
+
+## Pretrained Models
+
+### pix2pixHD with style encoder (9 feature channels):
+
+`https://algvrithm.com/files/supremap/pix2pixhd_with_style_encoder_iter_16500.pt`
+
+Use with configuration file
+
+`configs/projects/pix2pixhd/supremap/supremap_swisstopo_256_with_style_enc_9_feat_ch.yaml`
+
+### pix2pixHD without style encoder:
+
+`https://algvrithm.com/files/supremap/pix2pixhd_without_style_encoder_iter_18500.pt`
+
+Use with configuration file
+
+`configs/projects/pix2pixhd/supremap/supremap_swisstopo_256_without_style_enc.yaml`
+
+
+# Original Imaginaire README
+
 <img src="imaginaire_logo.svg" alt="imaginaire_logo.svg" height="360"/>
 
 # Imaginaire
