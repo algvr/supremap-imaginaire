@@ -67,7 +67,7 @@ This repository will automatically download and use a Cityscapes-1K-pretrained c
 
 ## Results
 
-We provide the following Peak Signal-Noise Ratio (PSNR) and Structural Similarity Index (SSIM) results achieved on the SupReMap Swisstopo dataset for reference, calculated using `scripts/calculate_metrics.py`. Visualizations are available at https://algvrithm.com/supremap-vis-v1/.
+We provide the following Peak Signal-Noise Ratio (PSNR), Structural Similarity Index (SSIM) and Frechet Inception Distance (FID) results achieved on the SupReMap Swisstopo dataset for reference, calculated using `scripts/calculate_metrics.py`. Visualizations are available at https://algvrithm.com/supremap-vis-v1/.
 
 ### With style encoder (9 feature channels):
 
